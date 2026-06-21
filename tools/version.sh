@@ -25,7 +25,11 @@ osx_bundle_sed_path="${builddir}/osx-bundle.sed"
 last_svn_revision=6962
 last_svn_hash="16cd907fe7482cb54a7374cd28b8501f138116be"
 
-git_revision=$(expr $last_svn_revision + $(git rev-list --count $last_svn_hash..HEAD))
+# In a shallow clone the base commit may be absent, making rev-list fail; fall
+# back to the base revision so the build still produces a valid version number.
+rev_count=$(git rev-list --count "$last_svn_hash"..HEAD 2> /dev/null)
+test x"$rev_count" = x && rev_count=0
+git_revision=$(expr $last_svn_revision + $rev_count)
 git_version_str=$(git describe --exact-match 2> /dev/null)
 installer_version='0.0.0'
 resource_version='0, 0, 0'

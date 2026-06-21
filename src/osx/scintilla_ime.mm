@@ -41,14 +41,20 @@
 }
 @end
 
-@interface ScintillaNSView : wxNSView <NSTextInputClient>
+// Declared as an NSView subclass purely so this translation unit compiles and
+// links without a hard reference to wx's private `wxNSView` class (which is not
+// exported by Homebrew's wxWidgets dylib). The methods defined here are copied
+// at runtime onto a class whose real superclass is the live `wxNSView`, so the
+// instance layout and superclass chain are correct in practice. See ime::inject.
+@interface ScintillaNSView : NSView <NSTextInputClient>
 @property (nonatomic, readonly) wxStyledTextCtrl *stc;
 @property (nonatomic, readonly) IMEState *state;
 @end
 
 @implementation ScintillaNSView
 - (Class)superclass {
-    return [wxNSView superclass];
+    Class wxcls = objc_getClass("wxNSView");
+    return wxcls ? class_getSuperclass(wxcls) : [NSView class];
 }
 
 - (wxStyledTextCtrl *)stc {
@@ -186,9 +192,36 @@
 @end
 
 namespace osx { namespace ime {
+// Build (once) a class whose real superclass is the live, non-exported
+// `wxNSView`, copying the IME method implementations compiled into the
+// ScintillaNSView template above. This avoids a link-time dependency on
+// wxNSView while preserving correct superclass/ivar layout for object_setClass.
+static Class ime_view_class() {
+    static Class cls = [] () -> Class {
+        Class wxcls = objc_getClass("wxNSView");
+        if (!wxcls) return nil;
+        if (Class existing = objc_getClass("AegisubScintillaNSView"))
+            return existing;
+        Class c = objc_allocateClassPair(wxcls, "AegisubScintillaNSView", 0);
+        if (!c) return nil;
+        unsigned count = 0;
+        Method *methods = class_copyMethodList([ScintillaNSView class], &count);
+        for (unsigned i = 0; i < count; ++i)
+            class_addMethod(c, method_getName(methods[i]),
+                            method_getImplementation(methods[i]),
+                            method_getTypeEncoding(methods[i]));
+        free(methods);
+        objc_registerClassPair(c);
+        return c;
+    }();
+    return cls;
+}
+
 void inject(wxStyledTextCtrl *ctrl) {
+    Class cls = ime_view_class();
+    if (!cls) return;
     id view = (id)ctrl->GetHandle();
-    object_setClass(view, [ScintillaNSView class]);
+    object_setClass(view, cls);
 
     auto state = [IMEState new];
     objc_setAssociatedObject(view, [IMEState class], state,

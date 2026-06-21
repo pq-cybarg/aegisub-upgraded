@@ -365,6 +365,29 @@ void Automation(wxTreebook *book, Preferences *parent) {
 	p->SetSizerAndFit(p->sizer);
 }
 
+/// LLM preferences page
+void LLM(wxTreebook *book, Preferences *parent) {
+	auto p = new OptionPage(book, parent, _("LLM"));
+
+	auto provider = p->PageSizer(_("Provider"));
+	const wxString prov_arr[4] = { _("Anthropic (Claude)"), _("OpenAI"),
+	                               _("Ollama (local)"), _("llama.cpp server (local)") };
+	wxArrayString prov_choice(4, prov_arr);
+	p->OptionChoice(provider, _("Provider"), prov_choice, "LLM/Provider");
+	p->OptionAdd(provider, _("Endpoint (blank uses provider default)"), "LLM/Endpoint");
+	p->OptionAdd(provider, _("Model"), "LLM/Model");
+	p->OptionAdd(provider, _("API key (blank uses ANTHROPIC_API_KEY / OPENAI_API_KEY)"), "LLM/API Key");
+
+	auto behavior = p->PageSizer(_("Behavior"));
+	p->OptionAdd(behavior, _("Temperature"), "LLM/Temperature", 0, 2, 0.1);
+	p->OptionAdd(behavior, _("Max response tokens"), "LLM/Max Tokens", 1, 200000);
+	p->OptionAdd(behavior, _("Batch size (lines per request)"), "LLM/Batch Size", 1, 200);
+	p->OptionAdd(behavior, _("Target language (Translate)"), "LLM/Target Language");
+	p->OptionAdd(behavior, _("Target reading speed in CPS (Condense)"), "LLM/CPS Target", 1, 100);
+
+	p->SetSizerAndFit(p->sizer);
+}
+
 /// Advanced preferences page
 void Advanced(wxTreebook *book, Preferences *parent) {
 	auto p = new OptionPage(book, parent, _("Advanced"));
@@ -799,6 +822,7 @@ Preferences::Preferences(wxWindow *parent): wxDialog(parent, -1, _("Preferences"
 	new Interface_Hotkeys(book, this);
 	Backup(book, this);
 	Automation(book, this);
+	LLM(book, this);
 	Advanced(book, this);
 	Advanced_Audio(book, this);
 	Advanced_Video(book, this);

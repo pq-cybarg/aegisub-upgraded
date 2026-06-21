@@ -20,6 +20,19 @@
 		"Dark Mode" : false
 	},
 
+	"LLM" : {
+		"Provider" : 0,
+		"Endpoint" : "",
+		"Model" : "claude-sonnet-4-6",
+		"API Key" : "",
+		"Temperature" : 0.3,
+		"Max Tokens" : 4096,
+		"Target Language" : "English",
+		"CPS Target" : 17,
+		"Context Lines" : 2,
+		"Batch Size" : 25
+	},
+
 
 	"Audio" : {
 		"Auto" : {

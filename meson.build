@@ -204,6 +204,9 @@ endif
 deps += dependency('icu-uc', version: '>=4.8.1.1')
 deps += dependency('icu-i18n', version: '>=4.8.1.1')
 
+# Used by the LLM features for HTTPS requests to chat-completion providers.
+deps += dependency('libcurl', version: '>=7.61.0')
+
 dep_avail = []
 foreach dep: [
     # audio, in order of precedence

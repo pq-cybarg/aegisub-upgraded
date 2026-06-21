@@ -24,6 +24,8 @@
         { "command" : "grid/fold/toggle" },
         { "command" : "grid/fold/clear" },
         {},
+        { "submenu" : "main/llm", "text" : "&LLM" },
+        {},
         { "command" : "edit/line/cut" },
         { "command" : "edit/line/copy" },
         { "command" : "edit/line/paste" },
@@ -38,9 +40,19 @@
         { "submenu" : "main/timing",   "text" : "&Timing" },
         { "submenu" : "main/video",    "text" : "&Video" },
         { "submenu" : "main/audio",    "text" : "&Audio" },
+        { "submenu" : "main/llm",      "text" : "&LLM" },
         { "special" : "automation",    "text" : "A&utomation" },
         { "submenu" : "main/view",     "text" : "Vie&w" },
         { "submenu" : "main/help",     "text" : "&Help", "special" : "help" }
+    ],
+    "main/llm" : [
+        { "command" : "llm/translate" },
+        { "command" : "llm/condense" },
+        { "command" : "llm/proofread" },
+        { "command" : "llm/rephrase" },
+        { "command" : "llm/custom" },
+        {},
+        { "command" : "llm/configure" }
     ],
     "main/file" : [
         { "command" : "subtitle/new" },

@@ -37,6 +37,7 @@ all_test_sources += [
     'tests/keyframe.cpp',
     'tests/line_iterator.cpp',
     'tests/line_wrap.cpp',
+    'tests/llm.cpp',
     'tests/mru.cpp',
     'tests/option.cpp',
     'tests/path.cpp',

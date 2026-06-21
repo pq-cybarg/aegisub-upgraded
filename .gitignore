@@ -47,3 +47,4 @@ subprojects/hunspell-*
 subprojects/uchardet-*
 subprojects/vapoursynth
 subprojects/xxHash-*
+.cache/

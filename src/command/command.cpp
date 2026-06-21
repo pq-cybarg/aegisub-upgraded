@@ -81,6 +81,7 @@ namespace cmd {
 	void init_grid();
 	void init_help();
 	void init_keyframe();
+	void init_llm();
 	void init_recent();
 	void init_subtitle();
 	void init_time();
@@ -98,6 +99,7 @@ namespace cmd {
 		init_grid();
 		init_help();
 		init_keyframe();
+		init_llm();
 		init_recent();
 		init_subtitle();
 		init_time();
