@@ -32,10 +32,17 @@ void ensure_curl_init() {
 	std::call_once(curl_init_flag, [] { curl_global_init(CURL_GLOBAL_DEFAULT); });
 }
 
+// Bound the response we will buffer so a malicious or runaway endpoint cannot
+// exhaust memory. 64 MiB is far larger than any legitimate chat completion.
+constexpr size_t kMaxResponseBytes = 64u * 1024 * 1024;
+
 size_t write_cb(char *ptr, size_t size, size_t nmemb, void *userdata) {
 	auto *out = static_cast<std::string *>(userdata);
-	out->append(ptr, size * nmemb);
-	return size * nmemb;
+	size_t n = size * nmemb;
+	if (out->size() + n > kMaxResponseBytes)
+		return 0; // signal an error to libcurl, aborting the transfer
+	out->append(ptr, n);
+	return n;
 }
 
 int xfer_cb(void *clientp, curl_off_t, curl_off_t, curl_off_t, curl_off_t) {
@@ -79,6 +86,16 @@ std::string complete(Config const& cfg, Request const& req,
 
 	std::string response;
 	std::function<bool()> cancel_copy = is_cancelled;
+
+	// TLS hardening: verify the peer certificate and that the hostname matches.
+	// These are libcurl's defaults, but we set them explicitly so the behaviour
+	// can't be weakened by a build/environment that flips the defaults.
+	curl_easy_setopt(easy.h, CURLOPT_SSL_VERIFYPEER, 1L);
+	curl_easy_setopt(easy.h, CURLOPT_SSL_VERIFYHOST, 2L);
+	// Only ever speak http/https (http is needed for local Ollama/llama.cpp),
+	// and never let a redirect downgrade or jump to another protocol.
+	curl_easy_setopt(easy.h, CURLOPT_PROTOCOLS_STR, "http,https");
+	curl_easy_setopt(easy.h, CURLOPT_REDIR_PROTOCOLS_STR, "https");
 
 	curl_easy_setopt(easy.h, CURLOPT_URL, url.c_str());
 	curl_easy_setopt(easy.h, CURLOPT_POST, 1L);

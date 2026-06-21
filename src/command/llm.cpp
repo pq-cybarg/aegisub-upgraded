@@ -120,6 +120,22 @@ bool require_model(llm::Config const& cfg) {
 	return false;
 }
 
+// Refuse to silently send an API key to a non-local plaintext http endpoint,
+// where it would travel in clear text. Local servers (Ollama/llama.cpp) are
+// allowed without prompting; https is always fine.
+bool endpoint_is_safe(llm::Config const& cfg) {
+	if (cfg.api_key.empty()) return true;
+	std::string url = llm::request_url(cfg);
+	if (url.compare(0, 7, "http://") != 0) return true;
+	std::string host = url.substr(7);
+	host = host.substr(0, host.find_first_of("/:"));
+	if (host == "localhost" || host == "127.0.0.1" || host == "::1") return true;
+	return wxYES == wxMessageBox(
+		wxString::Format(_("The endpoint \"%s\" uses unencrypted HTTP, so your API key "
+		                   "would be sent in clear text. Send it anyway?"), to_wx(host)),
+		_("LLM"), wxYES_NO | wxICON_WARNING);
+}
+
 // Process one chunk of lines through the model. Tries a single batched request
 // first; if the model returns the wrong number of items (or malformed JSON),
 // falls back to one request per line so a single bad line can't fail the batch.
@@ -158,7 +174,7 @@ void run_batch_operation(agi::Context *c, wxString const& undo_msg,
                          std::string const& system_prompt,
                          std::string const& instruction) {
 	llm::Config cfg = load_config();
-	if (!require_selection(c) || !require_model(cfg)) return;
+	if (!require_selection(c) || !require_model(cfg) || !endpoint_is_safe(cfg)) return;
 
 	std::vector<AssDialogue *> sel = c->selectionController->GetSortedSelection();
 	std::vector<std::string> inputs;
@@ -305,7 +321,7 @@ struct llm_condense final : public Command {
 	}
 	void operator()(agi::Context *c) override {
 		llm::Config cfg = load_config();
-		if (!require_selection(c) || !require_model(cfg)) return;
+		if (!require_selection(c) || !require_model(cfg) || !endpoint_is_safe(cfg)) return;
 
 		const int cps = cps_target();
 		std::vector<AssDialogue *> sel = c->selectionController->GetSortedSelection();

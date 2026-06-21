@@ -61,14 +61,22 @@ local function json_escape(s)
 	return s
 end
 
--- Write a string to a temporary file and return its path.
+-- Write a string to a temporary file and return its path. The file is created
+-- with owner-only permissions because it may hold the API key (curl config).
+math.randomseed(os.time())
 local function write_temp(contents)
 	local path = aegisub.decode_path("?temp") .. "/aegisub_llm_" .. tostring(os.time()) ..
-		"_" .. tostring(math.random(100000)) .. ".json"
+		"_" .. tostring(math.random(1, 2147483647)) .. ".tmp"
 	local f = assert(io.open(path, "w"))
 	f:write(contents)
 	f:close()
+	os.execute('chmod 600 "' .. path .. '" 2>/dev/null')
 	return path
+end
+
+-- Escape a value for use inside a double-quoted curl config-file entry.
+local function curl_escape(s)
+	return (s:gsub('\\', '\\\\'):gsub('"', '\\"'))
 end
 
 -- Run a single completion and return the assistant's text (or nil, error).
@@ -87,22 +95,33 @@ local function complete(cfg, system_prompt, user_prompt)
 	end
 
 	local body_file = write_temp(body)
-	local url, header
+
+	-- Build a curl config file (-K) so the API key and URL never appear in the
+	-- process argument list (visible via `ps`) and are never interpreted by the
+	-- shell. Only the random temp path is interpolated into the command.
+	local url, auth_lines
 	if cfg.provider == "openai" then
 		url = cfg.endpoint .. "/chat/completions"
-		header = "-H 'Authorization: Bearer " .. cfg.key .. "'"
+		auth_lines = cfg.key ~= ""
+			and ('header = "Authorization: Bearer ' .. curl_escape(cfg.key) .. '"\n') or ""
 	else
 		url = cfg.endpoint .. "/v1/messages"
-		header = "-H 'x-api-key: " .. cfg.key .. "' -H 'anthropic-version: 2023-06-01'"
+		auth_lines = 'header = "x-api-key: ' .. curl_escape(cfg.key) .. '"\n' ..
+			'header = "anthropic-version: 2023-06-01"\n'
 	end
 
-	local cmd = string.format(
-		"curl -s -S -X POST %s -H 'Content-Type: application/json' %s --data-binary @%q",
-		url, header, body_file)
-	local pipe = io.popen(cmd)
+	local conf = "silent\nshow-error\nrequest = \"POST\"\n" ..
+		'url = "' .. curl_escape(url) .. '"\n' ..
+		'header = "Content-Type: application/json"\n' ..
+		auth_lines ..
+		'data-binary = "@' .. curl_escape(body_file) .. '"\n'
+	local conf_file = write_temp(conf)
+
+	local pipe = io.popen('curl -K "' .. conf_file .. '"')
 	local response = pipe:read("*a")
 	pipe:close()
 	os.remove(body_file)
+	os.remove(conf_file)
 
 	-- Extract the assistant text from either provider's response shape. We keep
 	-- this tolerant rather than pulling in a full JSON parser.
