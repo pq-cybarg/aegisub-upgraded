@@ -431,6 +431,7 @@
 		},
 		"Edit Box" : {
 			"Soft Line Break": false,
+			"Native": false,
 			"Font Face" : "",
 			"Font Size" : 13
 		},

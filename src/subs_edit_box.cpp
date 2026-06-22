@@ -50,6 +50,7 @@
 #include "retina_helper.h"
 #include "selection_controller.h"
 #include "subs_edit_ctrl.h"
+#include "subs_edit_ctrl_native.h"
 #include "text_selection_controller.h"
 #include "timeedit_ctrl.h"
 #include "tooltip_manager.h"
@@ -206,19 +207,26 @@ SubsEditBox::SubsEditBox(wxWindow *parent, agi::Context *context)
 	main_sizer->Add(middle_left_sizer, wxSizerFlags().Expand().Border(wxLEFT | wxRIGHT | wxBOTTOM, 3));
 	main_sizer->Add(middle_right_sizer, wxSizerFlags().Expand().Border(wxLEFT | wxRIGHT | wxBOTTOM, 3));
 
-	// Text editor
-	edit_ctrl = new SubsTextEditCtrl(this, wxDefaultSize, (OPT_GET("App/Dark Mode")->GetBool() ? wxBORDER_SIMPLE : wxBORDER_SUNKEN), c);
-	edit_ctrl->Bind(wxEVT_CHAR_HOOK, &SubsEditBox::OnKeyDown, this);
+	// Text editor. Default is the Scintilla control; an opt-in native wxTextCtrl
+	// can be selected for better OS text-input integration (no syntax
+	// highlighting / calltips / inline spell-check in that mode).
+	long edit_border = OPT_GET("App/Dark Mode")->GetBool() ? wxBORDER_SIMPLE : wxBORDER_SUNKEN;
+	bool use_native = OPT_GET("Subtitle/Edit Box/Native")->GetBool();
+	if (use_native)
+		native_ctrl = new SubsTextEditCtrlNative(this, wxDefaultSize, edit_border, c);
+	else
+		edit_ctrl = new SubsTextEditCtrl(this, wxDefaultSize, edit_border, c);
+	EditWindow()->Bind(wxEVT_CHAR_HOOK, &SubsEditBox::OnKeyDown, this);
 
 	secondary_editor = new wxTextCtrl(this, -1, "", wxDefaultPosition, wxDefaultSize, (OPT_GET("App/Dark Mode")->GetBool() ? wxBORDER_SIMPLE : wxBORDER_SUNKEN) | wxTE_MULTILINE | wxTE_READONLY);
 	// Here we use the height of secondary_editor as the initial size of edit_ctrl,
 	// which is more reasonable than the default given by wxWidgets.
 	// See: https://trac.wxwidgets.org/ticket/18471#ticket
 	//      https://github.com/wangqr/Aegisub/issues/4
-	edit_ctrl->SetInitialSize(secondary_editor->GetSize());
+	EditWindow()->SetInitialSize(secondary_editor->GetSize());
 
 	main_sizer->Add(secondary_editor, wxSizerFlags(1).Expand().Border(wxLEFT | wxRIGHT | wxBOTTOM, 3));
-	main_sizer->Add(edit_ctrl, wxSizerFlags(1).Expand().Border(wxLEFT | wxRIGHT | wxBOTTOM, 3));
+	main_sizer->Add(EditWindow(), wxSizerFlags(1).Expand().Border(wxLEFT | wxRIGHT | wxBOTTOM, 3));
 	main_sizer->Hide(secondary_editor);
 
 	bottom_sizer = new wxBoxSizer(wxHORIZONTAL);
@@ -231,8 +239,12 @@ SubsEditBox::SubsEditBox(wxWindow *parent, agi::Context *context)
 
 	SetSizerAndFit(main_sizer);
 
-	edit_ctrl->Bind(wxEVT_STC_MODIFIED, &SubsEditBox::OnChange, this);
-	edit_ctrl->SetModEventMask(wxSTC_MOD_INSERTTEXT | wxSTC_MOD_DELETETEXT | wxSTC_STARTACTION);
+	if (edit_ctrl) {
+		edit_ctrl->Bind(wxEVT_STC_MODIFIED, &SubsEditBox::OnChange, this);
+		edit_ctrl->SetModEventMask(wxSTC_MOD_INSERTTEXT | wxSTC_MOD_DELETETEXT | wxSTC_STARTACTION);
+	}
+	else
+		native_ctrl->Bind(wxEVT_TEXT, &SubsEditBox::OnChangeNative, this);
 
 	Bind(wxEVT_TEXT, &SubsEditBox::OnLayerEnter, this, layer->GetId());
 	Bind(wxEVT_SPINCTRL, &SubsEditBox::OnLayerEnter, this, layer->GetId());
@@ -253,8 +265,11 @@ SubsEditBox::SubsEditBox(wxWindow *parent, agi::Context *context)
 		context->initialLineState->AddChangeListener(&SubsEditBox::OnLineInitialTextChanged, this),
 	 });
 
-	context->textSelectionController->SetControl(edit_ctrl);
-	edit_ctrl->SetFocus();
+	// The text selection controller bridges Scintilla; in native mode it is left
+	// unset (its accessors are null-safe).
+	if (edit_ctrl)
+		context->textSelectionController->SetControl(edit_ctrl);
+	EditWindow()->SetFocus();
 
 	bool show_original = OPT_GET("Subtitle/Show Original")->GetBool();
 	if (show_original) {
@@ -366,7 +381,7 @@ void SubsEditBox::UpdateFields(int type, bool repopulate_lists) {
 	}
 
 	if (type & AssFile::COMMIT_DIAG_TEXT) {
-		edit_ctrl->SetTextTo(line->Text);
+		EditSetText(line->Text.get());
 		UpdateCharacterCount(line->Text);
 	}
 
@@ -449,17 +464,45 @@ void SubsEditBox::UpdateFrameTiming(agi::vfr::Framerate const& fps) {
 }
 
 void SubsEditBox::OnKeyDown(wxKeyEvent &event) {
-	if (!osx::ime::process_key_event(edit_ctrl, event))
-		hotkey::check("Subtitle Edit Box", c, event);
+	// The Scintilla IME shim only applies to the Scintilla control; the native
+	// control handles input methods itself.
+	if (edit_ctrl && osx::ime::process_key_event(edit_ctrl, event))
+		return;
+	hotkey::check("Subtitle Edit Box", c, event);
 }
 
 void SubsEditBox::OnChange(wxStyledTextEvent &event) {
-	if (line && edit_ctrl->GetTextRaw().data() != line->Text.get()) {
+	if (line && EditGetTextUTF8() != line->Text.get()) {
 		if (event.GetModificationType() & wxSTC_STARTACTION)
 			commit_id = -1;
 		CommitText(_("modify text"));
 		UpdateCharacterCount(line->Text);
 	}
+}
+
+void SubsEditBox::OnChangeNative(wxCommandEvent &) {
+	if (line && EditGetTextUTF8() != line->Text.get()) {
+		CommitText(_("modify text"));
+		UpdateCharacterCount(line->Text);
+	}
+}
+
+wxWindow *SubsEditBox::EditWindow() const {
+	return edit_ctrl ? static_cast<wxWindow *>(edit_ctrl)
+	                 : static_cast<wxWindow *>(native_ctrl);
+}
+
+void SubsEditBox::EditSetText(std::string const& text) {
+	if (edit_ctrl) edit_ctrl->SetTextTo(text);
+	else           native_ctrl->SetTextTo(text);
+}
+
+std::string SubsEditBox::EditGetTextUTF8() const {
+	if (edit_ctrl) {
+		auto buf = edit_ctrl->GetTextRaw();
+		return std::string(buf.data(), buf.length());
+	}
+	return native_ctrl->GetTextUTF8();
 }
 
 void SubsEditBox::Commit(wxString const& desc, int type, bool amend, AssDialogue *line) {
@@ -491,8 +534,8 @@ void SubsEditBox::SetSelectedRows(T AssDialogueBase::*field, wxString const& val
 }
 
 void SubsEditBox::CommitText(wxString const& desc) {
-	auto data = edit_ctrl->GetTextRaw();
-	SetSelectedRows(&AssDialogue::Text, boost::flyweight<std::string>(data.data(), data.length()), desc, AssFile::COMMIT_DIAG_TEXT, true);
+	auto data = EditGetTextUTF8();
+	SetSelectedRows(&AssDialogue::Text, boost::flyweight<std::string>(data), desc, AssFile::COMMIT_DIAG_TEXT, true);
 }
 
 void SubsEditBox::CommitTimes(TimeField field) {
@@ -591,7 +634,7 @@ void SubsEditBox::SetControlsState(bool state) {
 	Enable(state);
 	if (!state) {
 		wxEventBlocker blocker(this);
-		edit_ctrl->SetTextTo("");
+		EditSetText("");
 	}
 }
 
@@ -642,7 +685,7 @@ void SubsEditBox::OnCommentChange(wxCommandEvent &evt) {
 
 void SubsEditBox::CallCommand(const char *cmd_name) {
 	cmd::call(cmd_name, c);
-	edit_ctrl->SetFocus();
+	EditWindow()->SetFocus();
 }
 
 void SubsEditBox::UpdateCharacterCount(std::string const& text) {

@@ -30,6 +30,7 @@
 #include <array>
 #include <boost/container/map.hpp>
 #include <boost/flyweight/flyweight_fwd.hpp>
+#include <string>
 #include <vector>
 
 #include <wx/combobox.h>
@@ -45,6 +46,7 @@ class AssDialogue;
 class AssStyle;
 class RetinaHelper;
 class SubsTextEditCtrl;
+class SubsTextEditCtrlNative;
 class TimeEdit;
 class wxButton;
 class wxCheckBox;
@@ -141,7 +143,14 @@ class SubsEditBox final : public wxPanel {
 	wxRadioButton *MakeRadio(wxString const& text, bool start, wxString const& tooltip);
 
 	void OnChange(wxStyledTextEvent &event);
+	void OnChangeNative(wxCommandEvent &event);
 	void OnKeyDown(wxKeyEvent &event);
+
+	// Edit-control accessors that work whether the Scintilla (edit_ctrl) or the
+	// native (native_ctrl) control is active.
+	wxWindow *EditWindow() const;
+	void EditSetText(std::string const& text);
+	std::string EditGetTextUTF8() const;
 
 	void OnActiveLineChanged(AssDialogue *new_line);
 	void OnSelectedSetChanged();
@@ -199,7 +208,8 @@ class SubsEditBox final : public wxPanel {
 
 	void SetDurationField();
 
-	SubsTextEditCtrl *edit_ctrl;
+	SubsTextEditCtrl *edit_ctrl = nullptr;
+	SubsTextEditCtrlNative *native_ctrl = nullptr;
 	wxTextCtrl *secondary_editor;
 
 public:

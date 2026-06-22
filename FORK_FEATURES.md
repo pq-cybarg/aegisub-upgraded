@@ -18,6 +18,9 @@ sources and licenses.
 - **Tap-to-time** (`time/tap`) — tap at each line's start to time it from the
   playing audio; a lightweight, additive revival of the EaterOA / Japan7 "tap
   timing" workflow. Bind a key under Preferences → Hotkeys.
+- **Opt-in native editor** (`Subtitle/Edit Box/Native`) — use the OS-native
+  `wxTextCtrl` instead of Scintilla for the edit box (see "Native editor mode"
+  below for the tradeoffs).
 
 ## Fork inventory (sources + licenses)
 
@@ -49,7 +52,7 @@ MPL-1.1 (`universalchardet/`). Official Windows/macOS *binaries* are effectively
 | High-DPI, video panning, spectrum/freq mapping, stereo/XAudio2, folding, extended Lua API, vector-clip hotkeys, window-restricted color picker, wangqr time-video tool | wangqr / AegisubDC / moex3 / EleonoreMizo | — | **Already in base** (merged by arch1t3cht). |
 | Lua 5.3 / moonjit, old libass/VSFilter swaps | AegisubDC | — | **Superseded** by the base's modern dependencies — intentionally not ported. |
 | FontBase "loaded fonts" | AegisubDC | Windows (GDI) | **Cross-platform-equivalent already works** — see below. |
-| Native editor (wxTextCtrl) toggle | wangqr | Cross-platform | **Deferred** — see below. |
+| Native editor (wxTextCtrl) option | wangqr | Cross-platform | **Pulled in** as an opt-in `Subtitle/Edit Box/Native` mode (default off; the Scintilla editor is unchanged). |
 | aegisub-cli (headless runner) | Myaamori | Cross-platform | **Out of scope** — a separate standalone binary, not an editor feature. |
 
 ## Windows-only features → Mac/Linux assessment
@@ -63,22 +66,37 @@ MPL-1.1 (`universalchardet/`). Official Windows/macOS *binaries* are effectively
   runtime `wxNSView` subclassing in `src/osx/scintilla_ime.mm` (also a build fix
   for Homebrew wxWidgets).
 
-## Deferred: native editor (wxTextCtrl) toggle
+## Native editor mode (opt-in) — implemented
 
-wangqr added an option to swap the Scintilla (`wxStyledTextCtrl`) edit control
-for a native `wxTextCtrl`, primarily to improve IME input on Windows. We did not
-port it because:
-1. Its main benefit (IME) is already solved here via the macOS IME shim.
-2. The subtitle edit control (`subs_edit_ctrl.cpp`) is `wxStyledTextCtrl`
-   throughout (syntax highlighting, calltips, spell-check squiggles); a runtime
-   toggle means maintaining a parallel native control — a large, invasive change
-   to a core editing path.
-3. It is inherently interactive and cannot be behaviorally verified in this
-   headless build environment, so shipping it blind would risk regressing the
-   editor.
+wangqr's fork *replaced* the Scintilla (`wxStyledTextCtrl`) edit control with a
+native `wxTextCtrl` (`SubsTextEditCtrl final : public wxTextCtrl`), primarily for
+better IME input on Windows. Here it is implemented as an **opt-in option**
+(`Subtitle/Edit Box/Native`, default off, under Preferences → Interface → Edit
+Box), so the Scintilla editor remains the default and is untouched:
 
-It is recorded here as a known, sourced gap with a clear rationale rather than
-shipped untested.
+- New control `src/subs_edit_ctrl_native.{h,cpp}` (`SubsTextEditCtrlNative`).
+- `subs_edit_box` constructs Scintilla *or* the native control and routes the
+  ~handful of control-specific operations (`GetTextRaw`, `SetTextTo`, the
+  `wxEVT_STC_MODIFIED` vs `wxEVT_TEXT` change event, the IME shim) accordingly.
+  `TextSelectionController` (Scintilla-typed and null-safe) is simply left unset
+  in native mode.
+- Verified: both the default and native modes launch without crashing.
+
+**Tradeoffs (why it's opt-in):** native mode gains OS text-input integration
+(dictation, Services, accessibility) but **loses override-tag syntax
+highlighting, calltips, and inline spell-check squiggles**.
+
+**Important macOS finding:** on macOS the *Scintilla* editor already provides the
+two things this option is usually wanted for — native spell-checking
+(`SpellCheckerFactory` already uses `CreateCocoaSpellChecker` / `NSSpellChecker`,
+with Scintilla rendering the squiggles) and working IME (the runtime `wxNSView`
+subclass in `src/osx/scintilla_ime.mm`). So on macOS the native mode's marginal
+benefit is mostly dictation/Services/accessibility, and most users are better
+served by the default Scintilla editor.
+
+**Caveat:** the editor's full interactive behavior (typing, IME composition,
+line-switch text sync) in native mode should be confirmed hands-on; this build
+environment can verify launch but cannot drive the GUI.
 
 ## Verification note
 
