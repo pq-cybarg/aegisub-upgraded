@@ -1,3 +1,48 @@
+# Aegisub — LLM-upgraded
+
+This is a fork of [Aegisub](https://github.com/arch1t3cht/Aegisub) (the actively
+maintained arch1t3cht fork) that adds **LLM-powered subtitling tools**, built
+natively into the editor and verified on modern macOS (Apple Silicon).
+
+## ✨ What's new
+
+A new **LLM** menu (and right-click entry) that operates on the selected lines,
+preserving timing, ASS override tags (`{\...}`) and `\N` breaks, and applying
+edits as a single undo step:
+
+- **Translate** selected lines into a configured target language
+- **Condense for reading speed** — shorten lines that exceed a target CPS
+- **Proofread** — fix grammar/spelling/punctuation in place
+- **Rephrase** — turn stiff or machine-translated lines into natural dialogue
+- **Custom prompt** — apply your own instruction to each line
+
+**Provider-agnostic** backend (libcurl) with built-in presets for **Anthropic
+(Claude)**, **OpenAI**, and local **Ollama** and **llama.cpp** servers — any
+OpenAI-compatible endpoint works, so you can run fully on-device.
+
+Requests run off the UI thread with a cancelable progress dialog. A bundled Lua
+automation script mirrors the features for hotkeys/scripting.
+
+- 📖 **Feature & setup guide:** [`LLM_FEATURES.md`](LLM_FEATURES.md)
+- 🔒 **Security/opsec/crypto audit:** [`SECURITY_AUDIT.md`](SECURITY_AUDIT.md)
+
+Implementation: pure, unit-tested request/response logic in
+`libaegisub/common/llm.cpp`; libcurl transport in `src/llm_client.cpp`; commands
+in `src/command/llm.cpp`; Preferences → LLM page; 15 unit tests (368 total
+passing). TLS is verified and hardened; API keys can be supplied via environment
+variables so they need never be written to disk.
+
+### Building on macOS
+
+```bash
+brew install cmake ninja pkg-config meson libass boost zlib ffms2 fftw hunspell wxwidgets icu4c
+export PKG_CONFIG_PATH="$(brew --prefix icu4c)/lib/pkgconfig"
+meson setup build --buildtype=release -Dbuild_osx_bundle=true
+ninja -C build
+```
+
+---
+
 ## arch1t3cht's Aegisub "fork"
 Download release builds [here](https://github.com/arch1t3cht/Aegisub/releases), or the latest CI builds [here](https://github.com/arch1t3cht/Aegisub/actions?query=branch%3Afeature+event%3Apush).
 
