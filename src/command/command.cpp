@@ -84,6 +84,7 @@ namespace cmd {
 	void init_llm();
 	void init_recent();
 	void init_subtitle();
+	void init_tap();
 	void init_time();
 	void init_timecode();
 	void init_tool();
@@ -102,6 +103,7 @@ namespace cmd {
 		init_llm();
 		init_recent();
 		init_subtitle();
+		init_tap();
 		init_time();
 		init_timecode();
 		init_tool();

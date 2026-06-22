@@ -37,4 +37,15 @@ namespace agi { namespace llm {
 std::string complete(Config const& cfg, Request const& req,
                      std::function<bool()> const& is_cancelled);
 
+/// Upload an audio/video file to the configured transcription endpoint and
+/// return the raw response body (parse it with agi::llm::parse_transcription).
+/// Uses an OpenAI-compatible multipart `/audio/transcriptions` request.
+///
+/// @param language Optional ISO-639-1 hint ("" lets the server auto-detect).
+/// @throws LLMError on configuration, network, HTTP, or API errors.
+/// @throws agi::UserCancelException if @p is_cancelled becomes true.
+std::string transcribe(Config const& cfg, std::string const& audio_path,
+                       std::string const& language,
+                       std::function<bool()> const& is_cancelled);
+
 } }

@@ -48,6 +48,7 @@ aegisub_src = files(
     'command/llm.cpp',
     'command/recent.cpp',
     'command/subtitle.cpp',
+    'command/tap.cpp',
     'command/time.cpp',
     'command/timecode.cpp',
     'command/tool.cpp',

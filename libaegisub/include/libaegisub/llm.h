@@ -105,4 +105,27 @@ std::string build_batch_user_prompt(std::string const& instruction,
 /// @throws LLMError if no array of `expected` strings can be found.
 std::vector<std::string> parse_batch_array(std::string const& response, size_t expected);
 
+// --- Speech-to-text (Whisper) ---------------------------------------------
+//
+// A configurable transcription endpoint (OpenAI `/v1/audio/transcriptions`
+// with response_format=verbose_json — also spoken by whisper.cpp's server,
+// faster-whisper-server, LocalAI, and subgen-style servers) returns the spoken
+// audio as timed segments, which become subtitle lines.
+
+/// One timed transcription segment.
+struct TranscriptSegment {
+	int start_ms = 0;
+	int end_ms = 0;
+	std::string text;
+};
+
+/// Build the transcription request URL (base endpoint + the OpenAI path).
+std::string transcribe_url(Config const& cfg);
+
+/// Parse a verbose_json transcription response into timed segments (times are
+/// converted from fractional seconds to milliseconds).
+/// @throws LLMError on an API error, malformed body, or a response with no
+///         per-segment timing (e.g. plain `json`/`text` formats).
+std::vector<TranscriptSegment> parse_transcription(std::string const& body);
+
 } }

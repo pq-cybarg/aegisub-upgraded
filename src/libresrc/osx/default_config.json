@@ -30,7 +30,10 @@
 		"Target Language" : "English",
 		"CPS Target" : 17,
 		"Context Lines" : 2,
-		"Batch Size" : 25
+		"Batch Size" : 25,
+		"Transcribe Endpoint" : "",
+		"Transcribe Model" : "whisper-1",
+		"Transcribe Language" : ""
 	},
 
 

@@ -300,4 +300,89 @@ std::vector<std::string> parse_batch_array(std::string const& response, size_t e
 	return out;
 }
 
+namespace {
+// Read a JSON number (Integer or Double) as a double; returns false if absent
+// or not a number.
+bool get_number(json::Object const& obj, std::string const& key, double &out) {
+	auto it = obj.find(key);
+	if (it == obj.end()) return false;
+	try { out = static_cast<json::Double const&>(it->second); return true; }
+	catch (...) {}
+	try { out = static_cast<double>(static_cast<json::Integer const&>(it->second)); return true; }
+	catch (...) {}
+	return false;
+}
+} // namespace
+
+std::string transcribe_url(Config const& cfg) {
+	std::string base = cfg.endpoint.empty() ? default_endpoint(Provider::OpenAI)
+	                                         : trim_trailing_slash(cfg.endpoint);
+	const std::string path = "/audio/transcriptions";
+	if (base.size() >= path.size() &&
+	    base.compare(base.size() - path.size(), path.size(), path) == 0)
+		return base;
+	return base + path;
+}
+
+std::vector<TranscriptSegment> parse_transcription(std::string const& body) {
+	json::UnknownElement parsed;
+	try {
+		parsed = parse_json(body);
+	}
+	catch (std::exception const& e) {
+		throw LLMError("Could not parse transcription response as JSON: " +
+		               std::string(e.what()) + " -- body was: " + snippet(body));
+	}
+
+	try {
+		json::Object const& root = parsed;
+
+		auto err = root.find("error");
+		if (err != root.end()) {
+			try {
+				json::Object const& eo = err->second;
+				std::string msg = get_string(eo, "message");
+				if (!msg.empty()) throw LLMError("Transcription API error: " + msg);
+			}
+			catch (LLMError const&) { throw; }
+			catch (...) {}
+			throw LLMError("Transcription API returned an error: " + snippet(body));
+		}
+
+		auto seg_it = root.find("segments");
+		if (seg_it == root.end())
+			throw LLMError("Transcription response had no timed segments; request "
+			               "response_format=verbose_json. Body: " + snippet(body));
+
+		json::Array const& segments = seg_it->second;
+		std::vector<TranscriptSegment> out;
+		out.reserve(segments.size());
+		for (auto const& s : segments) {
+			json::Object const& so = s;
+			double start = 0, end = 0;
+			get_number(so, "start", start);
+			get_number(so, "end", end);
+			TranscriptSegment seg;
+			seg.start_ms = static_cast<int>(start * 1000.0 + 0.5);
+			seg.end_ms = static_cast<int>(end * 1000.0 + 0.5);
+			seg.text = get_string(so, "text");
+			// Whisper segments usually carry a leading space; trim edges.
+			size_t b = seg.text.find_first_not_of(" \t\r\n");
+			size_t e = seg.text.find_last_not_of(" \t\r\n");
+			seg.text = (b == std::string::npos) ? "" : seg.text.substr(b, e - b + 1);
+			if (!seg.text.empty())
+				out.push_back(std::move(seg));
+		}
+		if (out.empty())
+			throw LLMError("Transcription returned no usable segments: " + snippet(body));
+		return out;
+	}
+	catch (LLMError const&) {
+		throw;
+	}
+	catch (std::exception const&) {
+		throw LLMError("Unexpected transcription response shape: " + snippet(body));
+	}
+}
+
 } }

@@ -148,3 +148,51 @@ TEST(lagi_llm, batch_array_empty_expected) {
 TEST(lagi_llm, batch_array_no_array_throws) {
 	EXPECT_THROW(parse_batch_array("there is no array here", 1), LLMError);
 }
+
+TEST(lagi_llm, transcribe_url_paths) {
+	Config c; c.provider = Provider::OpenAI;
+	EXPECT_EQ("https://api.openai.com/v1/audio/transcriptions", transcribe_url(c));
+	Config local; local.endpoint = "http://localhost:8080/v1/";
+	EXPECT_EQ("http://localhost:8080/v1/audio/transcriptions", transcribe_url(local));
+	Config already; already.endpoint = "http://x/v1/audio/transcriptions";
+	EXPECT_EQ("http://x/v1/audio/transcriptions", transcribe_url(already));
+}
+
+TEST(lagi_llm, parse_transcription_verbose_json) {
+	std::string body = R"({"task":"transcribe","text":"Hello there. General Kenobi.","segments":[
+		{"id":0,"start":0.0,"end":1.5,"text":" Hello there."},
+		{"id":1,"start":1.5,"end":3.25,"text":" General Kenobi."}]})";
+	auto segs = parse_transcription(body);
+	ASSERT_EQ(2u, segs.size());
+	EXPECT_EQ(0, segs[0].start_ms);
+	EXPECT_EQ(1500, segs[0].end_ms);
+	EXPECT_EQ("Hello there.", segs[0].text); // leading space trimmed
+	EXPECT_EQ(1500, segs[1].start_ms);
+	EXPECT_EQ(3250, segs[1].end_ms);
+	EXPECT_EQ("General Kenobi.", segs[1].text);
+}
+
+TEST(lagi_llm, parse_transcription_integer_times) {
+	// Some servers emit whole-second integers rather than floats.
+	std::string body = R"({"segments":[{"start":2,"end":5,"text":"ok"}]})";
+	auto segs = parse_transcription(body);
+	ASSERT_EQ(1u, segs.size());
+	EXPECT_EQ(2000, segs[0].start_ms);
+	EXPECT_EQ(5000, segs[0].end_ms);
+}
+
+TEST(lagi_llm, parse_transcription_skips_blank_segments) {
+	std::string body = R"({"segments":[{"start":0,"end":1,"text":"   "},{"start":1,"end":2,"text":"hi"}]})";
+	auto segs = parse_transcription(body);
+	ASSERT_EQ(1u, segs.size());
+	EXPECT_EQ("hi", segs[0].text);
+}
+
+TEST(lagi_llm, parse_transcription_no_segments_throws) {
+	// response_format=json (no per-segment timing) must be rejected clearly.
+	EXPECT_THROW(parse_transcription(R"({"text":"whole thing"})"), LLMError);
+}
+
+TEST(lagi_llm, parse_transcription_error_throws) {
+	EXPECT_THROW(parse_transcription(R"({"error":{"message":"bad model"}})"), LLMError);
+}

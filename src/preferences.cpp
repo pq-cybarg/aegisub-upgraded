@@ -385,6 +385,11 @@ void LLM(wxTreebook *book, Preferences *parent) {
 	p->OptionAdd(behavior, _("Target language (Translate)"), "LLM/Target Language");
 	p->OptionAdd(behavior, _("Target reading speed in CPS (Condense)"), "LLM/CPS Target", 1, 100);
 
+	auto transcribe = p->PageSizer(_("Transcription (Whisper)"));
+	p->OptionAdd(transcribe, _("Endpoint (blank uses OpenAI)"), "LLM/Transcribe Endpoint");
+	p->OptionAdd(transcribe, _("Model"), "LLM/Transcribe Model");
+	p->OptionAdd(transcribe, _("Language hint (blank auto-detects)"), "LLM/Transcribe Language");
+
 	p->SetSizerAndFit(p->sizer);
 }
 

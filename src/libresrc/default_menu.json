@@ -52,6 +52,8 @@
         { "command" : "llm/rephrase" },
         { "command" : "llm/custom" },
         {},
+        { "command" : "llm/transcribe" },
+        {},
         { "command" : "llm/configure" }
     ],
     "main/file" : [
@@ -152,6 +154,8 @@
         { "command" : "time/snap/end_video" },
         { "command" : "time/snap/scene" },
         { "command" : "time/frame/current" },
+        {},
+        { "command" : "time/tap" },
         {},
         { "submenu" : "main/timing/make times continuous", "text" : "Make Times Continuous" }
     ],

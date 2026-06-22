@@ -28,7 +28,10 @@
 #include "../llm_client.h"
 #include "../options.h"
 #include "../preferences.h"
+#include "../project.h"
 #include "../selection_controller.h"
+
+#include <libaegisub/fs.h>
 
 #include <libaegisub/exception.h>
 #include <libaegisub/format.h>
@@ -92,6 +95,21 @@ llm::Config load_config() {
 
 	cfg.temperature = OPT_GET("LLM/Temperature")->GetDouble();
 	cfg.max_tokens = static_cast<int>(OPT_GET("LLM/Max Tokens")->GetInt());
+	return cfg;
+}
+
+// Transcription is always OpenAI-compatible (Whisper). It has its own endpoint
+// and model settings, but shares the API key (and env-var fallback).
+llm::Config load_transcribe_config() {
+	llm::Config cfg;
+	cfg.provider = llm::Provider::OpenAI;
+	cfg.endpoint = OPT_GET("LLM/Transcribe Endpoint")->GetString();
+	cfg.model = OPT_GET("LLM/Transcribe Model")->GetString();
+	cfg.api_key = OPT_GET("LLM/API Key")->GetString();
+	if (cfg.api_key.empty()) {
+		const char *env = std::getenv("OPENAI_API_KEY");
+		if (env) cfg.api_key = env;
+	}
 	return cfg;
 }
 
@@ -390,6 +408,60 @@ struct llm_condense final : public Command {
 	}
 };
 
+// Speech-to-text: upload the loaded media to a Whisper endpoint and insert the
+// returned timed segments as new dialogue lines.
+struct llm_transcribe final : public Command {
+	CMD_NAME("llm/transcribe")
+	STR_MENU("&Generate subtitles from audio\xE2\x80\xA6")
+	STR_DISP("Generate subtitles from audio")
+	STR_HELP("Transcribe the loaded audio/video into timed lines using a Whisper endpoint")
+	void operator()(agi::Context *c) override {
+		llm::Config cfg = load_transcribe_config();
+		if (!require_model(cfg) || !endpoint_is_safe(cfg)) return;
+
+		agi::fs::path media = c->project->AudioName();
+		if (media.empty()) media = c->project->VideoName();
+		if (media.empty()) {
+			wxMessageBox(_("Open an audio or video file first."), _("LLM"), wxOK | wxICON_INFORMATION);
+			return;
+		}
+
+		std::string lang = OPT_GET("LLM/Transcribe Language")->GetString();
+		std::vector<llm::TranscriptSegment> segs;
+		std::string error;
+		bool cancelled = false;
+
+		DialogProgress progress(c->parent, _("LLM"), _("Transcribing audio\xE2\x80\xA6"));
+		progress.Run([&](agi::ProgressSink *ps) {
+			ps->SetIndeterminate();
+			try {
+				std::string reply = llm::transcribe(cfg, media.string(), lang,
+				                                    [ps] { return ps->IsCancelled(); });
+				segs = llm::parse_transcription(reply);
+			}
+			catch (agi::UserCancelException const&) { cancelled = true; }
+			catch (agi::Exception const& e) { error = e.GetMessage(); }
+			catch (std::exception const& e) { error = e.what(); }
+		});
+
+		if (cancelled) return;
+		if (!error.empty()) {
+			wxMessageBox(to_wx(error), _("LLM error"), wxOK | wxICON_ERROR);
+			return;
+		}
+		if (segs.empty()) return;
+
+		for (auto const& seg : segs) {
+			auto line = new AssDialogue;
+			line->Start = seg.start_ms;
+			line->End = seg.end_ms;
+			line->Text = seg.text;
+			c->ass->Events.push_back(*line);
+		}
+		c->ass->Commit(_("LLM transcribe"), AssFile::COMMIT_DIAG_ADDREM);
+	}
+};
+
 struct llm_configure final : public Command {
 	CMD_NAME("llm/configure")
 	STR_MENU("&Configure\xE2\x80\xA6")
@@ -408,6 +480,7 @@ namespace cmd {
 		reg(agi::make_unique<llm_proofread>());
 		reg(agi::make_unique<llm_rephrase>());
 		reg(agi::make_unique<llm_custom>());
+		reg(agi::make_unique<llm_transcribe>());
 		reg(agi::make_unique<llm_configure>());
 	}
 }

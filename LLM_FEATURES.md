@@ -15,6 +15,7 @@ A new **LLM** menu (also in the right-click grid context menu) with:
 | **Proofread selected lines** | Fix spelling/grammar/punctuation in place without rephrasing. |
 | **Rephrase selected lines** | Turn stiff or machine-translated lines into natural dialogue. |
 | **Custom prompt…** | Apply your own instruction to each selected line. |
+| **Generate subtitles from audio…** | Transcribe the loaded audio/video to timed lines via Whisper (see below). |
 | **Configure…** | Jump to Preferences → LLM. |
 
 All operations run off the UI thread with a cancelable progress dialog and apply
@@ -67,6 +68,26 @@ Provider = **llama.cpp server (local)**, Model = whatever the server reports
 (often just the file name). This is also how you run a **raw `.gguf`** model:
 serve it with `llama-server` and point Aegisub at it. (Aegisub does not embed an
 inference engine; it talks to your local server.)
+
+## Transcription (Whisper)
+
+**LLM → Generate subtitles from audio…** uploads the currently-loaded audio or
+video file to a Whisper transcription endpoint and inserts the returned timed
+segments as new lines. It uses the OpenAI-compatible multipart
+`/audio/transcriptions` API (`response_format=verbose_json`), which is spoken by
+OpenAI, **whisper.cpp's `whisper-server`**, **faster-whisper-server**, LocalAI,
+and [subgen](https://github.com/McCloudS/subgen)-style servers — so it can run
+fully locally.
+
+Configure under **Preferences → LLM → Transcription (Whisper)**:
+- **Endpoint** — blank uses OpenAI; set e.g. `http://localhost:8080/v1` for a
+  local whisper.cpp server.
+- **Model** — e.g. `whisper-1` (OpenAI) or whatever your local server reports.
+- **Language hint** — optional ISO-639-1 code; blank auto-detects.
+
+The API key falls back to `OPENAI_API_KEY`. Local servers usually need none.
+Segment-timestamp parsing is unit-tested; the actual transcription needs a
+reachable endpoint.
 
 ## How robustness is handled
 
